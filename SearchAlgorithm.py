@@ -1,8 +1,6 @@
 import streamlit as st
 import numpy as np
-import heapq
-import matplotlib
-matplotlib.use('Agg')  # Add this line
+import heapq  # Add this line
 import matplotlib.pyplot as plt
 from io import BytesIO
 
