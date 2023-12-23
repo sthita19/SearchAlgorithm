@@ -1,69 +1,55 @@
-import sys
+import streamlit as st
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QVBoxLayout, QWidget, QGraphicsScene, QGraphicsView
-from PyQt5.QtCore import Qt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-import matplotlib.pyplot as plt
 import heapq
-import random
+import matplotlib.pyplot as plt
+from io import BytesIO
 
-class SearchAlgorithmGUI(QMainWindow):
+class SearchAlgorithmApp:
     def __init__(self):
-        super(SearchAlgorithmGUI, self).__init__()
+        self.box_size = 20
+        self.obstacle_density = 0.2
+        self.path = []
 
-        self.central_widget = QWidget(self)
-        self.setCentralWidget(self.central_widget)
+    def get_neighbors(self, current):
+        x, y = current
+        neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+        return [(x, y) for (x, y) in neighbors if 0 <= x < self.box_size and 0 <= y < self.box_size and (x, y) not in self.get_obstacles()]
 
-        self.start_label = QLabel('Start:', self)
-        self.end_label = QLabel('End:', self)
-        self.run_button = QPushButton('Run Dijkstra', self)
-        self.run_button.clicked.connect(self.run_dijkstra)
+    def get_obstacles(self):
+        predefined_obstacles = [(1, 2), (0, 2), (3, 2), (4, 2), (3, 2), (6, 2), (7, 2),
+                                (7, 3), (0, 4), (7, 5), (7, 6), (0, 6), (5, 9), (4, 6),
+                                (3, 6), (2, 6), (2, 8), (2, 4), (2, 3), (0,3), (12,9), 
+                                (2,17),(0,16),(1,19),(3,17),(12,19),(5,0),(7,1),
+                                (14,11),(11,14),(12,12),(5,17),(6,15),(9,11),
+                                (15,8), (16, 6), (12,18)]
+        return predefined_obstacles
 
-        self.run_buttonA = QPushButton('Run A*', self)
-        self.run_buttonA.clicked.connect(self.run_a_star)
+    def run_algorithm(self, algorithm):
+        start, end = (0, 0), (self.box_size - 1, self.box_size - 1)
 
-        self.run_buttonB = QPushButton('Run BFS', self)
-        self.run_buttonB.clicked.connect(self.run_bfs)
+        if algorithm == "Dijkstra":
+            iterations, progress = self.dijkstra_algorithm(start, end)
+        elif algorithm == "A*":
+            iterations, progress = self.a_star_algorithm(start, end)
+        elif algorithm == "BFS":
+            iterations, progress = self.bfs_algorithm(start, end)
+        elif algorithm == "DFS":
+            iterations, progress = self.dfs_algorithm(start, end)
+        else:
+            st.error("Invalid algorithm selected.")
+            return
 
-        self.run_buttonD = QPushButton('Run DFS', self)
-        self.run_buttonD.clicked.connect(self.run_dfs)
-
-        self.show_map_button = QPushButton('Show Map', self)
-        self.show_map_button.clicked.connect(self.show_map)
-
-        self.figure, self.ax = plt.subplots()
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setParent(self.central_widget)
-
-        self.layout = QVBoxLayout(self.central_widget)
-        self.layout.addWidget(self.start_label)
-        self.layout.addWidget(self.end_label)
-        self.layout.addWidget(self.run_button)
-        self.layout.addWidget(self.run_buttonA)
-        self.layout.addWidget(self.run_buttonB)
-        self.layout.addWidget(self.run_buttonD)
-        self.layout.addWidget(self.show_map_button)
-        self.layout.addWidget(self.canvas)
-
-        self.box_size = 20  # Increase box size to accommodate more obstacles
-        self.obstacle_density = 0.2  # Density of obstacles in the square
-        self.path = []  # Initialize the path attribute
-
-        self.map_dialog = None  # Initialize the map_dialog attribute
-
-    def run_bfs(self):
-        start, end = self.get_valid_start_end()
-        iterations, progress = self.bfs_algorithm(start, end)
+        self.show_map()
         self.plot_graph(iterations, progress)
 
-    def bfs_algorithm(self, start, end):
-        queue = [(0, start, [])]  # Updated queue to include the path taken
+    def dijkstra_algorithm(self, start, end):
         visited = set()
+        heap = [(0, start, [])]  # Updated heap to include the path taken
         iterations = []
         progress = []
 
-        while queue:
-            (cost, current, path) = queue.pop(0)
+        while heap:
+            (cost, current, path) = heapq.heappop(heap)
 
             if current in visited:
                 continue
@@ -79,32 +65,9 @@ class SearchAlgorithmGUI(QMainWindow):
             neighbors = self.get_neighbors(current)
             for neighbor in neighbors:
                 if neighbor not in visited and neighbor not in self.get_obstacles():
-                    queue.append((cost + 1, neighbor, path + [current]))
+                    heapq.heappush(heap, (cost + 1, neighbor, path + [current]))
 
         return iterations, progress
-
-
-
-    def run_a_star(self):
-        start, end = self.get_valid_start_end()
-        iterations, progress = self.a_star_algorithm(start, end)
-        self.plot_graph(iterations, progress)
-
-    def reconstruct_path(self, start, end, g_scores, max_iterations=1000):
-        path = set()
-        current = end
-        iterations = 0
-
-        while current != start and iterations < max_iterations:
-            path.add(current)
-            neighbors = self.get_neighbors(current)
-
-            # Find the unvisited neighbor with the lowest cost (g_score)
-            current = min(neighbors, key=lambda n: g_scores.get(n, float('inf')))
-            iterations += 1
-
-        path.add(start)
-        return path
 
     def a_star_algorithm(self, start, end):
         open_set = {start}
@@ -142,46 +105,6 @@ class SearchAlgorithmGUI(QMainWindow):
 
         return iterations, progress
 
-    
-
-
-    def run_dijkstra(self):
-        start, end = self.get_valid_start_end()
-        iterations, progress = self.dijkstra_algorithm(start, end)
-        self.plot_graph(iterations, progress)
-
-    def dijkstra_algorithm(self, start, end):
-        visited = set()
-        heap = [(0, start, [])]  # Updated heap to include the path taken
-        iterations = []
-        progress = []
-
-        while heap:
-            (cost, current, path) = heapq.heappop(heap)
-
-            if current in visited:
-                continue
-
-            visited.add(current)
-            iterations.append(len(visited))
-            progress.append(cost)
-
-            if current == end:
-                self.path = path + [current]  # Store the final path
-                return iterations, progress
-
-            neighbors = self.get_neighbors(current)
-            for neighbor in neighbors:
-                if neighbor not in visited and neighbor not in self.get_obstacles():
-                    heapq.heappush(heap, (cost + 1, neighbor, path + [current]))
-
-        return iterations, progress
-
-    def run_bfs(self):
-        start, end = self.get_valid_start_end()
-        iterations, progress = self.bfs_algorithm(start, end)
-        self.plot_graph(iterations, progress)
-
     def bfs_algorithm(self, start, end):
         queue = [(0, start, [])]  # Updated queue to include the path taken
         visited = set()
@@ -208,11 +131,6 @@ class SearchAlgorithmGUI(QMainWindow):
                     queue.append((cost + 1, neighbor, path + [current]))
 
         return iterations, progress
-    
-    def run_dfs(self):
-        start, end = self.get_valid_start_end()
-        iterations, progress = self.dfs_algorithm(start, end)
-        self.plot_graph(iterations, progress)
 
     def dfs_algorithm(self, start, end):
         stack = [(0, start, [])]  # Updated stack to include the path taken
@@ -240,36 +158,20 @@ class SearchAlgorithmGUI(QMainWindow):
                     stack.append((cost + 1, neighbor, path + [current]))
 
         return iterations, progress
-   
-    def get_neighbors(self, current):
-        x, y = current
-        neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-        return [(x, y) for (x, y) in neighbors if 0 <= x < self.box_size and 0 <= y < self.box_size and (x, y) not in self.get_obstacles()]
 
-
-    def get_obstacles(self):
-    # Define your predefined obstacles as a list of coordinates
-        predefined_obstacles = [(1, 2), (0, 2), (3, 2), (4, 2), (3, 2), (6, 2), (7, 2),
-                                (7, 3), (0, 4), (7, 5), (7, 6), (0, 6), (5, 9), (4, 6),
-                                (3, 6), (2, 6), (2, 8), (2, 4), (2, 3), (0,3), (12,9), 
-                                (2,17),(0,16),(1,19),(3,17),(12,19),(5,0),(7,1),
-                                (14,11),(11,14),(12,12),(5,17),(6,15),(9,11),
-                                (15,8), (16, 6), (12,18)]
-
-        return predefined_obstacles
-
-    def get_valid_start_end(self):
-        start = (0, 0)  # Top left corner
-        end = (self.box_size - 1, self.box_size - 1)  # Bottom right corner
-        return start, end
-
-    def get_shortest_path(self, start, end):
+    def reconstruct_path(self, start, end, g_scores, max_iterations=1000):
         path = set()
         current = end
-        while current != start:
+        iterations = 0
+
+        while current != start and iterations < max_iterations:
             path.add(current)
             neighbors = self.get_neighbors(current)
-            current = min(neighbors, key=lambda n: self.distance(n, start))
+
+            # Find the unvisited neighbor with the lowest cost (g_score)
+            current = min(neighbors, key=lambda n: g_scores.get(n, float('inf')))
+            iterations += 1
+
         path.add(start)
         return path
 
@@ -277,70 +179,53 @@ class SearchAlgorithmGUI(QMainWindow):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
     def plot_graph(self, iterations, progress):
-        self.ax.clear()
-        self.ax.plot(iterations, progress, label='Progress')
-        self.ax.legend()
-        self.ax.set_xlabel('Iterations')
-        self.ax.set_ylabel('Progress (Cost)')
-        self.canvas.draw()
+        fig, ax = plt.subplots()
+        ax.plot(iterations, progress, label='Progress')
+        ax.legend()
+        ax.set_xlabel('Iterations')
+        ax.set_ylabel('Progress (Cost)')
+
+        # Use st.pyplot to display the figure
+        st.pyplot(fig)
 
     def show_map(self):
-        if self.map_dialog is None:
-            self.map_dialog = MapDialog(self)
-        self.map_dialog.update_map(self.box_size, self.get_obstacles(), self.path)
-        self.map_dialog.show()
+        # Display the map view above the other graphs
+        st.image(self.create_map_image(), use_column_width=True, caption='Map View')
 
-
-class MapDialog(QWidget):
-    def __init__(self, parent=None):
-        super(MapDialog, self).__init__(parent)
-        self.setWindowTitle('Map View')
-        self.setGeometry(200, 200, 400, 400)
-
-        self.scene = QGraphicsScene()
-        self.view = QGraphicsView(self.scene)
-
-        self.close_button = QPushButton('Close', self)
-        self.close_button.clicked.connect(self.close_dialog)
-
+    def create_map_image(self):
+        fig, ax = plt.subplots()
+        ax.add_patch(plt.Rectangle((0, 0), self.box_size, self.box_size, fill=None))
         
-        self.layout = QVBoxLayout(self)
-        self.layout.addWidget(self.close_button)
-        self.layout.addWidget(self.view)
-        
-        
-
-    def update_map(self, box_size, obstacles, path):
-        self.scene.clear()
-
-        # Draw square box
-        self.scene.addRect(0, 0, box_size * 20, box_size * 20, pen=Qt.black)
-
         # Draw obstacles
-        for obstacle in obstacles:
+        for obstacle in self.get_obstacles():
             x, y = obstacle
-            self.scene.addRect(x * 20, y * 20, 20, 20, brush=Qt.gray)
+            ax.add_patch(plt.Rectangle((x, y), 1, 1, color='gray'))
 
         # Draw path
-        for node in path:
+        for node in self.path:
             x, y = node
-            self.scene.addEllipse(x * 20, y * 20, 20, 20, pen=Qt.green)
+            ax.add_patch(plt.Circle((x + 0.5, y + 0.5), 0.4, color='green'))
 
-        # Show view
-        self.view.setSceneRect(0, 0, box_size * 20, box_size * 20)
-        self.view.setScene(self.scene)
-    
-    def close_dialog(self):
-        self.close()
+        ax.set_xlim(0, self.box_size)
+        ax.set_ylim(0, self.box_size)
+        ax.set_aspect('equal', adjustable='datalim')
+
+        # Save the figure to a BytesIO buffer
+        buffer = BytesIO()
+        plt.savefig(buffer, format='png')
+        plt.close(fig)  # Close the original figure to avoid double plotting
+
+        return buffer.getvalue()
 
 def main():
-    app = QApplication(sys.argv)
-    window = SearchAlgorithmGUI()
-    window.setGeometry(100, 100, 800, 600)
-    window.setWindowTitle('Search Algorithm GUI')
-    window.show()
-    sys.exit(app.exec_())
+    st.title("Search Algorithm GUI")
 
+    app = SearchAlgorithmApp()
+
+    # Move the algorithm selection to the main screen
+    algorithm = st.selectbox("Select Algorithm", ["Dijkstra", "A*", "BFS", "DFS"])
+    if st.button("Run Algorithm"):
+        app.run_algorithm(algorithm)
 
 if __name__ == "__main__":
     main()
